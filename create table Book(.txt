@@ -1,0 +1,173 @@
+CREATE TABLE book(
+    bookid SERIAL PRIMARY KEY,
+    bookname VARCHAR(20) NOT NULL,
+    bookavailable BOOLEAN NOT NULL,
+    bookcount INT,
+    empid INT,
+    pubid INT,
+    authid INT,
+    FOREIGN KEY(empid) REFERENCES employee(empid),
+    FOREIGN KEY(authid) REFERENCES author(authid),
+    FOREIGN KEY(pubid) REFERENCES publisher(pubid)
+);
+
+CREATE TABLE employee(
+    empid SERIAL PRIMARY KEY,
+    empfname VARCHAR(20) NOT NULL,
+    emplname VARCHAR(20) NOT NULL,
+    empsalary FLOAT,
+    empcontact VARCHAR(20),
+    password VARCHAR(255)
+);
+
+CREATE TABLE customer(
+    custid SERIAL PRIMARY KEY,
+    custfname VARCHAR(20),
+    custlname VARCHAR(20),
+    librarycard BOOLEAN,
+    custcontact VARCHAR(20),
+    password VARCHAR(255)
+);
+
+CREATE TABLE publisher(
+    pubid SERIAL PRIMARY KEY,
+    pubname VARCHAR(20),
+    pubcountry VARCHAR(20)
+);
+
+CREATE TABLE author(
+    authid SERIAL PRIMARY KEY,
+    authfname VARCHAR(20) NOT NULL,
+    authlname VARCHAR(20) NOT NULL,
+    authcountry VARCHAR(20)
+);
+
+CREATE TABLE feedback(
+    description VARCHAR(100) NOT NULL PRIMARY KEY,
+    rating_10 INT NOT NULL,
+    custid INT,
+    FOREIGN KEY(custid) REFERENCES customer(custid)
+);
+
+CREATE TABLE purchases(
+    custid INT NOT NULL,
+    bookid INT NOT NULL,
+    PRIMARY KEY(custid, bookid),
+    FOREIGN KEY(custid) REFERENCES customer(custid) ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY(bookid) REFERENCES book(bookid) ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE TABLE borrows(
+    custid INT NOT NULL,
+    bookid INT NOT NULL,
+    startdate DATE,
+    enddate DATE GENERATED ALWAYS AS (startdate + INTERVAL '10 days') STORED,
+    PRIMARY KEY(custid, bookid),
+    FOREIGN KEY(custid) REFERENCES customer(custid) ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY(bookid) REFERENCES book(bookid) ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+INSERT INTO author (authid, authfname, authlname, authcountry) 
+VALUES 
+(1, 'Author1Fname', 'Author1Lname', 'USA'),
+(2, 'Author2Fname', 'Author2Lname', 'UK'),
+(3, 'Author3Fname', 'Author3Lname', 'Canada'),
+(4, 'Author4Fname', 'Author4Lname', 'Palestine'),
+(5, 'Author5Fname', 'Author5Lname', 'Jordan');
+
+INSERT INTO book (bookid, bookname, bookavailable, bookcount, empid, pubid, authid) 
+VALUES 
+(10, 'Book1', true, 10, 1001, 104, 1),
+(12, 'Book2', true, 15, 1002, 105, 2),
+(14, 'Book3', true, 8, 1003, 106, 3),
+(16, 'Book4', true, 8, 1004, 107, 4),
+(18, 'Book5', true, 8, 1005, 108, 5);
+
+INSERT INTO employee (empid, empfname, emplname, empsalary, empcontact, password) 
+VALUES 
+(1001, 'John', 'Doe', 50000, '555-1234', 'password123'),
+(1002, 'Jane', 'Smith', 60000, '555-5678', 'password456'),
+(1003, 'Michael', 'Johnson', 55000, '555-8765', 'password789'),
+(1004, 'Mic', 'Johnson', 55000, '555-4321', 'password012'),
+(1005, 'Jon', 'Johnson', 55000, '555-3456', 'password345');
+
+INSERT INTO publisher (pubid, pubname, pubcountry) 
+VALUES 
+(104, 'Publisher1', 'USA'),
+(105, 'Publisher2', 'UK'),
+(106, 'Publisher3', 'Canada'),
+(107, 'Publisher4', 'Palestine'),
+(108, 'Publisher5', 'Jordan');
+
+INSERT INTO feedback (description, rating_10, custid) 
+VALUES 
+('Good book', 8, 4001),
+('Could be better', 6, 4002),
+('Excellent read', 10, 4003),
+('Excellent', 10, 4004),
+('Nice', 10, 4005);
+
+INSERT INTO purchases (custid, bookid) 
+VALUES 
+(4001, 10),
+(4002, 12),
+(4003, 14),
+(4004, 16),
+(4005, 18);
+
+INSERT INTO customer (custid, custfname, custlname, librarycard, custcontact, password) 
+VALUES 
+(4001, 'Alice', 'Johnson', true, '123-456-7890', 'custpass1'),
+(4002, 'Bob', 'Smith', false, '987-654-3210', 'custpass2'),
+(4003, 'Eva', 'Davis', true, '456-789-0123', 'custpass3'),
+(4004, 'Charlie', 'Brown', true, '321-654-9870', 'custpass4'),
+(4005, 'Diana', 'Prince', false, '654-321-0987', 'custpass5');
+
+INSERT INTO borrows (custid, bookid, startdate) 
+VALUES 
+(4001, 10, '2024-10-20'),
+(4002, 12, '2024-10-19'),
+(4003, 14, '2024-11-01'),
+(4004, 16, '2024-11-02'),
+(4005, 18, '2024-11-04');
+
+-- Creating a trigger to enforce the condition that librarycard must be true
+CREATE OR REPLACE FUNCTION check_library_card()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM customer WHERE custid = NEW.custid AND librarycard = true) THEN
+        RAISE EXCEPTION 'customer must have a library card';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_check_library_card
+BEFORE INSERT OR UPDATE ON borrows
+FOR EACH ROW EXECUTE FUNCTION check_library_card();
+
+-- Trigger to decrease bookcount when a book is borrowed
+CREATE OR REPLACE FUNCTION decrease_book_count_on_borrow()
+RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE book SET bookcount = bookcount - 1 WHERE bookid = NEW.bookid;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_decrease_book_count_on_borrow
+AFTER INSERT ON borrows
+FOR EACH ROW EXECUTE FUNCTION decrease_book_count_on_borrow();
+
+-- Trigger to decrease bookcount when a book is purchased
+CREATE OR REPLACE FUNCTION decrease_book_count_on_purchase()
+RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE book SET bookcount = bookcount - 1 WHERE bookid = NEW.bookid;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_decrease_book_count_on_purchase
+AFTER INSERT ON purchases
+FOR EACH ROW EXECUTE FUNCTION decrease_book_count_on_purchase();
