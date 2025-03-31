@@ -12,7 +12,7 @@ A system for managing libraries that allows adding books, searching for them, an
 - Programming Language: Java  
 - Methodologies: BDD (Behavior-Driven Development) & TDD (Test-Driven Development)  
 - Framework: Spring Boot  
-- Database: MySQL  
+- Database: PLpgSQL  
 
 ## Installation & Running  
 1. Clone the repository:  
